@@ -1,0 +1,204 @@
+/* Almaari Design Tokens - A Private Archive Room */
+:root {
+  --paper: #EDE6D3;
+  --paper-light: #F7F3E9;
+  --paper-card: #FAF8F2;
+  --paper-dark: #DECDB0;
+  --ink: #151A17;
+  --ink-muted: #535C56;
+  --ink-faint: #89938B;
+  --verdigris: #2E6B5E;
+  --verdigris-dark: #204B42;
+  --verdigris-light: #E4ECE8;
+  --vermilion: #E1452C;
+  --vermilion-light: #FCECE9;
+  --mustard: #D8A23A;
+  --mustard-light: #FAF4E5;
+
+  --border-ink: 1.5px solid var(--ink);
+  --border-ink-thin: 1px solid var(--ink);
+  --border-muted: 1px solid rgba(21, 26, 23, 0.2);
+
+  --shadow-sm: 2px 2px 0px var(--ink);
+  --shadow-md: 3px 3px 0px var(--ink);
+  --shadow-lg: 5px 5px 0px var(--ink);
+
+  --font-serif: 'Fraunces', Georgia, serif;
+  --font-sans: 'Instrument Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.55;
+  font-size: 16px;
+  min-height: 100vh;
+  position: relative;
+  background-image: radial-gradient(rgba(21, 26, 23, 0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Typography */
+h1, h2, h3, h4, .serif-heading {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* Tactile archival buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 10px 20px;
+  background-color: var(--paper-card);
+  color: var(--ink);
+  border: var(--border-ink);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.15s ease;
+  user-select: none;
+}
+
+.btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--ink);
+}
+
+.btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--ink);
+}
+
+.btn-primary {
+  background-color: var(--verdigris);
+  color: var(--paper-light);
+}
+
+.btn-primary:hover {
+  background-color: var(--verdigris-dark);
+}
+
+.btn-accent {
+  background-color: var(--vermilion);
+  color: #fff;
+}
+
+.btn-accent:hover {
+  background-color: #c93a23;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-sm:hover {
+  box-shadow: 3px 3px 0px var(--ink);
+}
+
+.btn-sm:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px var(--ink);
+}
+
+/* Archival Cards & Containers */
+.archive-card {
+  background-color: var(--paper-card);
+  border: var(--border-ink);
+  box-shadow: var(--shadow-md);
+  padding: 24px;
+  position: relative;
+}
+
+/* Input Fields */
+.input-field {
+  width: 100%;
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  background-color: var(--paper-light);
+  border: var(--border-ink);
+  color: var(--ink);
+  outline: none;
+  box-shadow: inset 1px 1px 0px rgba(0,0,0,0.06);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input-field:focus {
+  border-color: var(--verdigris);
+  box-shadow: 2px 2px 0px var(--verdigris);
+}
+
+.input-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+  color: var(--ink-muted);
+}
+
+/* Stamped tags */
+.stamp-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--ink);
+  background-color: var(--paper-light);
+  color: var(--ink);
+  box-shadow: 1px 1px 0px var(--ink);
+}
+
+.stamp-tag.verdigris {
+  background-color: var(--verdigris-light);
+  border-color: var(--verdigris);
+  color: var(--verdigris-dark);
+}
+
+.stamp-tag.mustard {
+  background-color: var(--mustard-light);
+  border-color: var(--mustard);
+  color: #795710;
+}
+
+.stamp-tag.vermilion {
+  background-color: var(--vermilion-light);
+  border-color: var(--vermilion);
+  color: var(--vermilion);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

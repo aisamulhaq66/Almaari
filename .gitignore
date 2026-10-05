@@ -1,0 +1,37 @@
+# Secrets and environment
+.env
+.env.local
+
+# Virtual environment & python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# Database & Vectors
+almaari.db
+chroma_db/
+*.sqlite3
+
+# Uploaded documents
+uploads/*
+!uploads/.gitkeep
+
+# Node modules & build artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+
+# Binaries & Tunnels
+cloudflared.exe
+*.log
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
