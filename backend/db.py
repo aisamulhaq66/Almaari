@@ -33,7 +33,7 @@ def verify_password(stored_hash: str, password: str) -> bool:
 
 
 def init_db():
-    """Initializes tables and seeds the demo user if not present."""
+    """Initializes tables, migrates missing columns, and seeds demo users."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -43,6 +43,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'employee',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -55,38 +56,69 @@ def init_db():
             original_name TEXT NOT NULL,
             file_size INTEGER NOT NULL,
             chunk_count INTEGER NOT NULL,
+            allowed_roles TEXT NOT NULL DEFAULT 'executive,hr,employee',
+            uploader TEXT NOT NULL DEFAULT 'admin',
             uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    # Seed demo user 'admin' with password 'almaari123'
-    cursor.execute("SELECT id FROM users WHERE username = ?", ("admin",))
-    if not cursor.fetchone():
-        demo_hash = hash_password("almaari123")
-        cursor.execute(
-            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-            ("admin", demo_hash)
-        )
+    # Check and migrate columns if upgrading from old schema
+    cursor.execute("PRAGMA table_info(users)")
+    user_columns = [row["name"] for row in cursor.fetchall()]
+    if "role" not in user_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'employee'")
+
+    cursor.execute("PRAGMA table_info(documents)")
+    doc_columns = [row["name"] for row in cursor.fetchall()]
+    if "allowed_roles" not in doc_columns:
+        cursor.execute("ALTER TABLE documents ADD COLUMN allowed_roles TEXT NOT NULL DEFAULT 'executive,hr,employee'")
+    if "uploader" not in doc_columns:
+        cursor.execute("ALTER TABLE documents ADD COLUMN uploader TEXT NOT NULL DEFAULT 'admin'")
+
+    # Seed the three requested demo users
+    demo_users = [
+        ("executive", "executive123", "executive"),
+        ("hr", "hr123", "hr"),
+        ("employee", "employee123", "employee"),
+        ("admin", "almaari123", "executive"),  # Preserved for backward compatibility
+    ]
+
+    for uname, pwd, role in demo_users:
+        cursor.execute("SELECT id FROM users WHERE username = ?", (uname,))
+        row = cursor.fetchone()
+        if not row:
+            hashed = hash_password(pwd)
+            cursor.execute(
+                "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                (uname, hashed, role)
+            )
+        else:
+            # Ensure correct role is set
+            cursor.execute("UPDATE users SET role = ? WHERE username = ?", (role, uname))
 
     conn.commit()
     conn.close()
 
 
 def authenticate_user(username: str, password: str):
-    """Authenticates username and password against SQLite."""
+    """Authenticates username and password against SQLite, returning user dict with role."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+    cursor.execute("SELECT id, username, password_hash, role FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
     conn.close()
 
     if user and verify_password(user["password_hash"], password):
-        return dict(user)
+        return {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"]
+        }
     return None
 
 
-def add_document(filename: str, original_name: str, file_size: int, chunk_count: int) -> int:
-    """Adds a document record and returns the new document ID."""
+def add_document(filename: str, original_name: str, file_size: int, chunk_count: int, allowed_roles: str, uploader: str) -> int:
+    """Adds a document record with access roles and uploader."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -94,9 +126,9 @@ def add_document(filename: str, original_name: str, file_size: int, chunk_count:
     cursor.execute("DELETE FROM documents WHERE original_name = ?", (original_name,))
 
     cursor.execute("""
-        INSERT INTO documents (filename, original_name, file_size, chunk_count, uploaded_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (filename, original_name, file_size, chunk_count, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        INSERT INTO documents (filename, original_name, file_size, chunk_count, allowed_roles, uploader, uploaded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (filename, original_name, file_size, chunk_count, allowed_roles, uploader, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
     doc_id = cursor.lastrowid
     conn.commit()
@@ -104,21 +136,32 @@ def add_document(filename: str, original_name: str, file_size: int, chunk_count:
     return doc_id
 
 
-def get_all_documents() -> list[dict]:
-    """Retrieves all document records ordered by latest upload."""
+def get_all_documents(user_role: str = None) -> list[dict]:
+    """
+    Retrieves document records. If user_role is provided,
+    filters only documents the user's role is allowed to see.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, filename, original_name, file_size, chunk_count, uploaded_at FROM documents ORDER BY id DESC")
+    cursor.execute("SELECT id, filename, original_name, file_size, chunk_count, allowed_roles, uploader, uploaded_at FROM documents ORDER BY id DESC")
     rows = cursor.fetchall()
     conn.close()
-    return [dict(row) for row in rows]
+
+    results = []
+    for row in rows:
+        doc = dict(row)
+        roles = [r.strip().lower() for r in doc.get("allowed_roles", "").split(",") if r.strip()]
+        if user_role is None or user_role.lower() in roles:
+            results.append(doc)
+
+    return results
 
 
 def get_document_by_id(doc_id: int):
     """Retrieves single document by ID."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM documents WHERE id = ?", (doc_id,))
+    cursor.execute("SELECT id, filename, original_name, file_size, chunk_count, allowed_roles, uploader, uploaded_at FROM documents WHERE id = ?", (doc_id,))
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None

@@ -103,6 +103,9 @@ export default function Navbar({ user, onLogout }) {
               <span className="stamp-tag mustard">
                 keeper: {user.username}
               </span>
+              <span className="stamp-tag verdigris" style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                role: {user.role || "employee"}
+              </span>
               <button
                 onClick={onLogout}
                 className="btn btn-sm"

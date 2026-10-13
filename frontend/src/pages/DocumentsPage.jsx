@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getDocuments, uploadDocument, deleteDocument } from "../api";
+import { getDocuments, uploadDocument, deleteDocument, getStoredUser } from "../api";
 
-export default function DocumentsPage() {
+export default function DocumentsPage({ user }) {
+  const currentUser = user || getStoredUser();
+
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -10,13 +12,44 @@ export default function DocumentsPage() {
   const [notification, setNotification] = useState(null);
   const fileInputRef = useRef(null);
 
+  // Four-chip role selection state
+  const [roles, setRoles] = useState({
+    executive: true,
+    hr: true,
+    employee: true,
+  });
+
+  const isEveryone = roles.executive && roles.hr && roles.employee;
+  const noneSelected = !roles.executive && !roles.hr && !roles.employee;
+
+  const toggleEveryone = () => {
+    if (isEveryone) {
+      setRoles({ executive: false, hr: false, employee: false });
+    } else {
+      setRoles({ executive: true, hr: true, employee: true });
+    }
+  };
+
+  const toggleRole = (roleKey) => {
+    setRoles((prev) => ({ ...prev, [roleKey]: !prev[roleKey] }));
+  };
+
+  const getAllowedRolesString = () => {
+    if (isEveryone) return "everyone";
+    const active = [];
+    if (roles.executive) active.push("executive");
+    if (roles.hr) active.push("hr");
+    if (roles.employee) active.push("employee");
+    return active.join(",");
+  };
+
   const fetchDocs = async () => {
     try {
       setLoading(true);
       const data = await getDocuments();
       setDocuments(data.documents || []);
     } catch (err) {
-      showNotice("Could not load cupboard files.", "vermilion");
+      showNotice(err.message || "Could not load cupboard files.", "vermilion");
     } finally {
       setLoading(false);
     }
@@ -36,15 +69,22 @@ export default function DocumentsPage() {
   const handleFileUpload = async (file) => {
     if (!file) return;
 
+    if (noneSelected) {
+      showNotice("Select at least one role under 'Who can see this file?' before uploading.", "vermilion");
+      return;
+    }
+
     const ext = file.name.split(".").pop().toLowerCase();
     if (!["txt", "pdf"].includes(ext)) {
       showNotice("Only .pdf and .txt files can be kept in Almaari.", "vermilion");
       return;
     }
 
+    const allowedRolesStr = getAllowedRolesString();
+
     try {
       setUploading(true);
-      const res = await uploadDocument(file);
+      const res = await uploadDocument(file, allowedRolesStr);
       showNotice(`Filed away: ${file.name} (${res.chunk_count} chunks)`, "verdigris");
       fetchDocs();
     } catch (err) {
@@ -58,6 +98,10 @@ export default function DocumentsPage() {
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragOver(false);
+    if (noneSelected) {
+      showNotice("Select at least one role under 'Who can see this file?' before uploading.", "vermilion");
+      return;
+    }
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFileUpload(e.dataTransfer.files[0]);
     }
@@ -113,13 +157,16 @@ export default function DocumentsPage() {
               marginTop: "4px",
             }}
           >
-            Your private cupboard for company papers. Documents are read, chunked, and indexed.
+            Access is filtered by role (<strong>{currentUser?.role || "employee"}</strong>). Documents are read, chunked, and indexed.
           </p>
         </div>
 
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <span className="stamp-tag verdigris">
-            {documents.length} {documents.length === 1 ? "file" : "files"} filed
+            {documents.length} {documents.length === 1 ? "file" : "files"} visible
+          </span>
+          <span className="stamp-tag mustard" style={{ textTransform: "uppercase" }}>
+            role: {currentUser?.role || "employee"}
           </span>
         </div>
       </div>
@@ -144,81 +191,191 @@ export default function DocumentsPage() {
         )}
       </AnimatePresence>
 
-      {/* Drag & Drop Upload Zone */}
-      <motion.div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragOver(true);
-        }}
-        onDragLeave={() => setIsDragOver(false)}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        animate={{
-          scale: isDragOver ? 1.02 : 1,
-          backgroundColor: isDragOver ? "var(--verdigris-light)" : "var(--paper-light)",
-          borderColor: isDragOver ? "var(--verdigris)" : "var(--ink)",
-        }}
-        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+      {/* Upload Zone & Role Selector Box */}
+      <div
+        className="archive-card"
         style={{
-          border: "2px dashed var(--ink)",
-          padding: "36px 20px",
-          textAlign: "center",
-          cursor: "pointer",
           marginBottom: "36px",
-          boxShadow: isDragOver ? "4px 4px 0px var(--verdigris)" : "var(--shadow-sm)",
-          position: "relative",
+          backgroundColor: "var(--paper-light)",
+          padding: "24px",
         }}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.txt"
-          style={{ display: "none" }}
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              handleFileUpload(e.target.files[0]);
-            }
-          }}
-        />
-
-        {/* Tactile Paper Icon */}
-        <div style={{ marginBottom: "12px" }}>
-          <svg
-            width="40"
-            height="40"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="var(--ink)"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ display: "inline-block" }}
+        {/* 'Who can see this file?' Selector */}
+        <div style={{ marginBottom: "20px" }}>
+          <div
+            style={{
+              fontSize: "13px",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              color: "var(--ink)",
+              marginBottom: "10px",
+            }}
           >
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="12" y1="18" x2="12" y2="12" />
-            <line x1="9" y1="15" x2="15" y2="15" />
-          </svg>
+            Who can see this file?
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
+            {/* Everyone chip */}
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 450, damping: 22 }}
+              onClick={toggleEveryone}
+              className="btn btn-sm"
+              style={{
+                backgroundColor: isEveryone ? "var(--vermilion)" : "var(--paper-card)",
+                color: isEveryone ? "#fff" : "var(--ink)",
+                border: "1.5px solid var(--ink)",
+                boxShadow: isEveryone ? "2px 2px 0px var(--ink)" : "var(--shadow-sm)",
+              }}
+            >
+              Everyone
+            </motion.button>
+
+            {/* Executives chip */}
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 450, damping: 22 }}
+              onClick={() => toggleRole("executive")}
+              className="btn btn-sm"
+              style={{
+                backgroundColor: roles.executive ? "var(--vermilion)" : "var(--paper-card)",
+                color: roles.executive ? "#fff" : "var(--ink)",
+                border: "1.5px solid var(--ink)",
+                boxShadow: roles.executive ? "2px 2px 0px var(--ink)" : "var(--shadow-sm)",
+              }}
+            >
+              Executives
+            </motion.button>
+
+            {/* HR chip */}
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 450, damping: 22 }}
+              onClick={() => toggleRole("hr")}
+              className="btn btn-sm"
+              style={{
+                backgroundColor: roles.hr ? "var(--vermilion)" : "var(--paper-card)",
+                color: roles.hr ? "#fff" : "var(--ink)",
+                border: "1.5px solid var(--ink)",
+                boxShadow: roles.hr ? "2px 2px 0px var(--ink)" : "var(--shadow-sm)",
+              }}
+            >
+              HR
+            </motion.button>
+
+            {/* Employees chip */}
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 450, damping: 22 }}
+              onClick={() => toggleRole("employee")}
+              className="btn btn-sm"
+              style={{
+                backgroundColor: roles.employee ? "var(--vermilion)" : "var(--paper-card)",
+                color: roles.employee ? "#fff" : "var(--ink)",
+                border: "1.5px solid var(--ink)",
+                boxShadow: roles.employee ? "2px 2px 0px var(--ink)" : "var(--shadow-sm)",
+              }}
+            >
+              Employees
+            </motion.button>
+
+            {noneSelected && (
+              <span style={{ fontSize: "12px", color: "var(--vermilion)", fontStyle: "italic", marginLeft: "6px" }}>
+                * At least one role is required to upload
+              </span>
+            )}
+          </div>
         </div>
 
-        <div
+        {/* Drag & Drop Upload Zone */}
+        <motion.div
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!noneSelected) setIsDragOver(true);
+          }}
+          onDragLeave={() => setIsDragOver(false)}
+          onDrop={handleDrop}
+          onClick={() => {
+            if (!noneSelected && !uploading) fileInputRef.current?.click();
+          }}
+          animate={{
+            scale: isDragOver ? 1.02 : 1,
+            backgroundColor: noneSelected
+              ? "var(--paper-card)"
+              : isDragOver
+              ? "var(--verdigris-light)"
+              : "var(--paper-card)",
+            borderColor: noneSelected ? "rgba(21, 26, 23, 0.3)" : isDragOver ? "var(--verdigris)" : "var(--ink)",
+            opacity: noneSelected ? 0.6 : 1,
+          }}
+          transition={{ type: "spring", stiffness: 300, damping: 25 }}
           style={{
-            fontFamily: "var(--font-serif)",
-            fontSize: "19px",
-            fontWeight: 500,
-            marginBottom: "6px",
+            border: "2px dashed var(--ink)",
+            padding: "32px 20px",
+            textAlign: "center",
+            cursor: noneSelected ? "not-allowed" : "pointer",
+            boxShadow: isDragOver ? "4px 4px 0px var(--verdigris)" : "var(--shadow-sm)",
+            position: "relative",
           }}
         >
-          {uploading
-            ? "Reading and filing document into Almaari..."
-            : isDragOver
-            ? "Release to deposit document into the cupboard"
-            : "Drop a file here, or click to browse"}
-        </div>
-        <p style={{ color: "var(--ink-muted)", fontSize: "13px" }}>
-          Accepts <strong className="mono">.pdf</strong> and <strong className="mono">.txt</strong> files (~500 words per chunk indexed)
-        </p>
-      </motion.div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.txt"
+            disabled={noneSelected || uploading}
+            style={{ display: "none" }}
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                handleFileUpload(e.target.files[0]);
+              }
+            }}
+          />
+
+          <div style={{ marginBottom: "10px" }}>
+            <svg
+              width="36"
+              height="36"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--ink)"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ display: "inline-block" }}
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <line x1="9" y1="15" x2="15" y2="15" />
+            </svg>
+          </div>
+
+          <div
+            style={{
+              fontFamily: "var(--font-serif)",
+              fontSize: "18px",
+              fontWeight: 500,
+              marginBottom: "4px",
+            }}
+          >
+            {uploading
+              ? "Reading and filing document into Almaari..."
+              : noneSelected
+              ? "Select who can see this file above to enable upload"
+              : isDragOver
+              ? "Release to deposit document into the cupboard"
+              : "Drop a file here, or click to browse"}
+          </div>
+          <p style={{ color: "var(--ink-muted)", fontSize: "13px" }}>
+            Accepts <strong className="mono">.pdf</strong> and <strong className="mono">.txt</strong> files (~500 words per chunk indexed)
+          </p>
+        </motion.div>
+      </div>
 
       {/* Documents List */}
       <div>
@@ -234,7 +391,7 @@ export default function DocumentsPage() {
         >
           <span>Filed Documents</span>
           <span style={{ fontSize: "12px", fontFamily: "var(--font-sans)", color: "var(--ink-muted)", fontWeight: 400 }}>
-            (Swipe card left or click Remove to delete)
+            (Visible to your role)
           </span>
         </h2>
 
@@ -259,10 +416,10 @@ export default function DocumentsPage() {
                 marginBottom: "6px",
               }}
             >
-              The cupboard shelves are bare.
+              No documents visible for role: {currentUser?.role || "employee"}.
             </p>
             <p style={{ color: "var(--ink-muted)", fontSize: "14px" }}>
-              Drop a company policy, handbook, or notes above to begin questioning your archive.
+              Upload a document above or sign in with another role to view restricted files.
             </p>
           </div>
         ) : (
@@ -272,6 +429,7 @@ export default function DocumentsPage() {
                 <DocumentCard
                   key={doc.id}
                   doc={doc}
+                  currentUser={currentUser}
                   formatBytes={formatBytes}
                   onDelete={handleDelete}
                 />
@@ -285,71 +443,85 @@ export default function DocumentsPage() {
 }
 
 /**
- * DocumentCard with:
- * - Slight tilt on hover/touch
- * - Swipe-left gesture to reveal Delete action (spring snap-back)
- * - Spring entrance animation
+ * Formats allowed_roles string into readable labels
  */
-function DocumentCard({ doc, formatBytes, onDelete }) {
-  const [swiped, setSwiped] = useState(false);
+function formatAllowedRoles(allowedRolesStr) {
+  if (!allowedRolesStr) return "Everyone";
+  const parts = allowedRolesStr.split(",").map((s) => s.trim().toLowerCase());
+  if (
+    parts.includes("everyone") ||
+    (parts.includes("executive") && parts.includes("hr") && parts.includes("employee"))
+  ) {
+    return "Everyone";
+  }
+  const labels = [];
+  if (parts.includes("hr")) labels.push("HR");
+  if (parts.includes("executive")) labels.push("Executives");
+  if (parts.includes("employee")) labels.push("Employees");
+  return labels.join(", ") || allowedRolesStr;
+}
+
+/**
+ * DocumentCard with:
+ * - Access role tags (e.g. "HR, Executives" or "Everyone")
+ * - Uploader mono text (e.g. "by: hr")
+ * - Swipe left to delete ONLY if permitted (uploader or executive)
+ */
+function DocumentCard({ doc, currentUser, formatBytes, onDelete }) {
+  const canDelete = currentUser?.role === "executive" || doc.uploader === currentUser?.username;
 
   return (
     <div
       style={{
         position: "relative",
         overflow: "hidden",
-        backgroundColor: "var(--vermilion-light)",
+        backgroundColor: canDelete ? "var(--vermilion-light)" : "var(--paper-card)",
         border: "var(--border-ink)",
         boxShadow: "var(--shadow-sm)",
       }}
     >
-      {/* Background Delete Action revealed upon swiping left */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: "120px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          paddingRight: "16px",
-        }}
-      >
-        <button
-          onClick={() => onDelete(doc.id, doc.original_name)}
-          className="btn btn-accent btn-sm"
-          style={{ width: "90px" }}
+      {/* Background Delete Action (Only rendered if user is permitted to delete) */}
+      {canDelete && (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: "120px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            paddingRight: "16px",
+          }}
         >
-          Delete
-        </button>
-      </div>
+          <button
+            onClick={() => onDelete(doc.id, doc.original_name)}
+            className="btn btn-accent btn-sm"
+            style={{ width: "90px" }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
 
-      {/* Foreground Swipeable Card */}
+      {/* Foreground Card */}
       <motion.div
         layout
         initial={{ opacity: 0, y: 15, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, x: -100 }}
         transition={{ type: "spring", stiffness: 260, damping: 20 }}
-        drag="x"
+        drag={canDelete ? "x" : false}
         dragConstraints={{ left: -110, right: 0 }}
         dragElastic={0.15}
-        onDragEnd={(e, info) => {
-          if (info.offset.x < -60) {
-            setSwiped(true);
-          } else {
-            setSwiped(false);
-          }
-        }}
         whileHover={{ rotate: -0.3, y: -2 }}
         style={{
           position: "relative",
           zIndex: 2,
           backgroundColor: "var(--paper-card)",
           padding: "16px 20px",
-          cursor: "grab",
+          cursor: canDelete ? "grab" : "default",
           userSelect: "none",
         }}
       >
@@ -364,7 +536,6 @@ function DocumentCard({ doc, formatBytes, onDelete }) {
         >
           {/* File details */}
           <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: 0 }}>
-            {/* Archival Doc Icon */}
             <div
               style={{
                 width: "36px",
@@ -406,8 +577,11 @@ function DocumentCard({ doc, formatBytes, onDelete }) {
                   display: "flex",
                   gap: "10px",
                   flexWrap: "wrap",
+                  alignItems: "center",
                 }}
               >
+                <span className="mono">by: {doc.uploader || "admin"}</span>
+                <span>•</span>
                 <span>Filed: {doc.uploaded_at || "Recent"}</span>
                 <span>•</span>
                 <span>{formatBytes(doc.file_size)}</span>
@@ -415,27 +589,39 @@ function DocumentCard({ doc, formatBytes, onDelete }) {
             </div>
           </div>
 
-          {/* Stamped metadata tags & Delete button */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {/* Access Tags, Chunk Tag, and Delete button if authorized */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            {/* Allowed Roles Tag */}
+            <span
+              className="stamp-tag mustard"
+              title={`Permitted to: ${doc.allowed_roles || "everyone"}`}
+            >
+              access: {formatAllowedRoles(doc.allowed_roles)}
+            </span>
+
+            {/* Chunk Count */}
             <span className="stamp-tag verdigris">
               {doc.chunk_count} {doc.chunk_count === 1 ? "chunk" : "chunks"}
             </span>
 
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(doc.id, doc.original_name);
-              }}
-              className="btn btn-sm"
-              title="Remove file from cupboard"
-              style={{
-                backgroundColor: "transparent",
-                color: "var(--vermilion)",
-                borderColor: "rgba(21, 26, 23, 0.3)",
-              }}
-            >
-              Remove
-            </button>
+            {/* Remove button if permitted */}
+            {canDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(doc.id, doc.original_name);
+                }}
+                className="btn btn-sm"
+                title="Remove file from cupboard"
+                style={{
+                  backgroundColor: "transparent",
+                  color: "var(--vermilion)",
+                  borderColor: "rgba(21, 26, 23, 0.3)",
+                }}
+              >
+                Remove
+              </button>
+            )}
           </div>
         </div>
       </motion.div>

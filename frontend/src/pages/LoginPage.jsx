@@ -251,7 +251,7 @@ export default function LoginPage({ onLoginSuccess }) {
               color: "var(--ink-faint)",
             }}
           >
-            <span>Demo: admin / almaari123</span>
+            <span>Demo accounts: executive, hr, employee (key: [name]123)</span>
             <span className="mono">local-only</span>
           </div>
         </motion.div>

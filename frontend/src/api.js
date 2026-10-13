@@ -1,28 +1,71 @@
-// Centralized API client for Almaari
-// Uses relative /api which Vite proxies to http://127.0.0.1:8000.
-// This allows the app to work seamlessly across localhost, LAN, and public tunnel URLs.
+// Centralized API client for Almaari with RBAC Bearer Authentication
+// Uses relative /api proxy with http://127.0.0.1:8000 fallback.
 
-async function request(path, options = {}) {
-  // Try proxy first (/api/...)
+export function getStoredUser() {
   try {
-    const res = await fetch(`/api${path}`, options);
-    if (res.status === 404) {
-      // Direct localhost fallback if proxy not rewriting
-      return await fetch(`http://127.0.0.1:8000${path}`, options);
-    }
-    return res;
-  } catch (err) {
-    // Direct localhost fallback
-    return await fetch(`http://127.0.0.1:8000${path}`, options);
+    const data = localStorage.getItem("almaari_user");
+    return data ? JSON.parse(data) : null;
+  } catch {
+    return null;
   }
 }
 
+export function getAuthToken() {
+  const user = getStoredUser();
+  return user?.token || "";
+}
+
+async function request(path, options = {}) {
+  const token = getAuthToken();
+  const headers = new Headers(options.headers || {});
+
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const fetchOptions = {
+    ...options,
+    headers,
+  };
+
+  let res;
+  try {
+    res = await fetch(`/api${path}`, fetchOptions);
+    if (res.status === 404) {
+      // Direct localhost fallback if proxy not rewriting
+      res = await fetch(`http://127.0.0.1:8000${path}`, fetchOptions);
+    }
+  } catch (err) {
+    // Direct localhost fallback
+    res = await fetch(`http://127.0.0.1:8000${path}`, fetchOptions);
+  }
+
+  // Handle 401 Unauthorized: clear session and redirect to /login
+  if (res.status === 401) {
+    localStorage.removeItem("almaari_user");
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+  }
+
+  return res;
+}
+
 export async function loginUser(username, password) {
-  return request("/login", {
+  // Login does not need Bearer token
+  const res = await fetch(`http://127.0.0.1:8000/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
+  }).catch(() => {
+    return fetch(`/api/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
   });
+
+  return res;
 }
 
 export async function getDocuments() {
@@ -33,9 +76,10 @@ export async function getDocuments() {
   return res.json();
 }
 
-export async function uploadDocument(file) {
+export async function uploadDocument(file, allowedRoles = "everyone") {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("allowed_roles", allowedRoles);
 
   const res = await request("/upload", {
     method: "POST",

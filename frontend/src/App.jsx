@@ -37,7 +37,7 @@ function AnimatedRoutes({ user, onLoginSuccess, onLogout }) {
           element={
             user ? (
               <motion.div {...pageTransition}>
-                <DocumentsPage />
+                <DocumentsPage user={user} />
               </motion.div>
             ) : (
               <Navigate to="/login" replace />
@@ -50,7 +50,7 @@ function AnimatedRoutes({ user, onLoginSuccess, onLogout }) {
           element={
             user ? (
               <motion.div {...pageTransition}>
-                <ChatPage />
+                <ChatPage user={user} />
               </motion.div>
             ) : (
               <Navigate to="/login" replace />
