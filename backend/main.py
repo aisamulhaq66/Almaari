@@ -66,6 +66,21 @@ def get_current_user(authorization: Optional[str] = Header(None)):
     token = parts[1].strip()
     user = SESSIONS.get(token)
     if not user:
+        # If server was restarted/reloaded, check valid token format: almaari_<username>_<random>
+        if token.startswith("almaari_"):
+            token_parts = token.split("_")
+            if len(token_parts) >= 3:
+                uname = token_parts[1]
+                conn = db.get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, username, role FROM users WHERE username = ?", (uname,))
+                row = cursor.fetchone()
+                conn.close()
+                if row:
+                    user = {"id": row["id"], "username": row["username"], "role": row["role"]}
+                    SESSIONS[token] = user
+
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired session token. Please log in again."
