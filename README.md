@@ -133,8 +133,8 @@ Almaari/
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/aisamulhaq66/Almaari-base-1.git
-cd Almaari-base-1
+git clone https://github.com/aisamulhaq66/Almaari.git
+cd Almaari
 ```
 
 ### 2. Backend Setup
